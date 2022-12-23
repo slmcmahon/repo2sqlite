@@ -2,7 +2,7 @@ import os
 import sys
 import sqlite3
 import re
-import tempfile
+import subprocess
 
 DEFAULT_DB_PATH = os.path.join(os.path.expanduser('~'), 'commits.sqlite3')
 COMMITS_TABLE = """create table if not exists commits (
@@ -46,11 +46,6 @@ def get_repo_name():
     return url[-1].split('.')[0]
 
 
-def export_log(log_path):
-    os.system(
-        f"git log --pretty=format:'|%h||%s||%an||%ae||%aI' --numstat > {log_path}")
-
-
 def create_tables(csr):
     csr.execute(COMMITS_TABLE)
     csr.execute(FILES_TABLE)
@@ -74,19 +69,12 @@ def get_db_path():
 def main():
     repo_name = get_repo_name()
     if not repo_name:
-        print("not a git repo")
         exit(1)
 
     db_path = get_db_path()
     if not db_path:
         print(f'{sys.argv[1]} is not a valid path.  Exiting')
         exit(1)
-
-    log_fd, log_path = tempfile.mkstemp()
-
-    print(f'Exporting git log for {repo_name} to {log_path}.')
-    export_log(log_path)
-    print('Log export complete.\n\n')
 
     commit_pattern = re.compile("\|(.*?)\|\|(.*?)\|\|(.*?)\|\|(.*?)\|\|(.*)")
     file_pattern = re.compile("([\d|-]*)\s*([\d|-]*)\s*(.*)")
@@ -97,26 +85,28 @@ def main():
 
     create_tables(cursor)
 
-    with open(log_fd, 'r', encoding='utf-8') as file:
-        commit = None
-        for line in file:
-            line = line.strip()
-            if len(line) == 0:
-                continue
+    log_data = subprocess.Popen(["git", "log", "--pretty=format:|%h||%s||%an||%ae||%aI", "--numstat"],
+                              stdout=subprocess.PIPE, encoding="utf-8")
 
-            if line[0] == '|':
-                m = commit_pattern.match(line)
-                commit = m[1]
-                print(f'Writing data for {commit}.')
-                add_commit(cursor, commit, repo_name, m[2], m[3], m[4], m[5])
-            else:
-                m = file_pattern.match(line)
-                add_commit_file(cursor, commit, m[3], m[1], m[2])
+    commit = None
+    for line in log_data.stdout.readlines():
+        line = line.strip()
+        
+        if len(line) == 0:
+            continue
+        
+        if line[0] == '|':
+            m = commit_pattern.match(line)
+            commit = m[1]
+            print(f'Writing data for {commit}.')
+            add_commit(cursor, commit, repo_name, m[2], m[3], m[4], m[5])
+        else:
+            m = file_pattern.match(line)
+            add_commit_file(cursor, commit, m[3], m[1], m[2])
 
     conn.commit()
     conn.close()
     print(f'Created or updated database at {db_path}')
-    os.remove(log_path)
 
 
 if __name__ == "__main__":
