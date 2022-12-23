@@ -5,11 +5,31 @@ import re
 import tempfile
 
 DEFAULT_DB_PATH = os.path.join(os.path.expanduser('~'), 'commits.sqlite3')
+COMMITS_TABLE = """create table if not exists commits (
+    id text unique, 
+    repo_name text, 
+    summary text, 
+    author_name text, 
+    author_email text, 
+    committed_on datetime    
+);
+"""
+FILES_TABLE = """create table if not exists commit_files (
+    id text, 
+    name text, 
+    added int, 
+    deleted int,
+    constraint fk_id
+        foreign key (id)
+        references commits (id)
+        on delete cascade
+);
+"""
 
 
-def add_commit(csr, id, repo_name, summary, author_name, author_email, commit_date):
-    csr.execute("insert into commits (id, repo_name, summary, author_name, author_email, commit_date) values (?, ?, ?, ?, ?, ?)",
-                (id, repo_name, summary, author_name, author_email, commit_date))
+def add_commit(csr, id, repo_name, summary, author_name, author_email, committed_on):
+    csr.execute("insert into commits (id, repo_name, summary, author_name, author_email, committed_on) values (?, ?, ?, ?, ?, ?)",
+                (id, repo_name, summary, author_name, author_email, committed_on))
 
 
 def add_commit_file(csr, id, name, added, deleted):
@@ -32,9 +52,8 @@ def export_log(log_path):
 
 
 def create_tables(csr):
-    csr.execute("create table if not exists commits (id text unique, repo_name text, summary text, author_name text, author_email text, commit_date datetime)")
-    csr.execute(
-        "create table if not exists commit_files (id text, name text, added int, deleted int)")
+    csr.execute(COMMITS_TABLE)
+    csr.execute(FILES_TABLE)
 
 
 def get_db_path():
@@ -62,7 +81,7 @@ def main():
     if not db_path:
         print(f'{sys.argv[1]} is not a valid path.  Exiting')
         exit(1)
-    
+
     log_fd, log_path = tempfile.mkstemp()
 
     print(f'Exporting git log for {repo_name} to {log_path}.')
