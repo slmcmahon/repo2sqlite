@@ -21,3 +21,7 @@ This currently only works for git repos that have a remote defined.  I frequentl
 So, for ```git@github.com:slmcmahon/repo2sqlite.git```, it will extract ```repo2sqlite```.
 
 If the target database already exists, it will attempt to add to it.  Before runing ```git log```, it first checks the database to see if there are already entries for the current repository.  If so, it will get the date of the last recorded entry and use that as the ```--after``` argument to ```git log```.
+
+CREDITS
+==
+This is loosly based on examples from the following blog post by [Will Schenk](https://github.com/wschenk) - [gitlog in sqlite](https://willschenk.com/articles/2020/gitlog_in_sqlite/)
