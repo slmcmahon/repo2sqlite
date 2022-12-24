@@ -1,11 +1,12 @@
 import os
+from os.path import exists
 import sys
 import sqlite3
 import re
 import subprocess
-from datetime import datetime, timedelta
 
 DEFAULT_DB_PATH = os.path.join(os.path.expanduser('~'), 'commits.sqlite3')
+
 COMMITS_TABLE = """create table if not exists commits (
     id text unique, 
     repo_name text, 
@@ -55,28 +56,26 @@ def create_tables(csr):
 def get_db_path():
     if len(sys.argv) == 1:
         return DEFAULT_DB_PATH
-    else:
-        actual_path = None
-        proposed_path = sys.argv[1]
-        try:
-            with open(proposed_path, 'x') as tempfile:
-                actual_path = proposed_path
-        except:
-            print(f'The proposed path {proposed_path} is not a valid path.')
-            return None
-        return actual_path
+
+    proposed_path = sys.argv[1]
+    if exists(proposed_path):
+        return proposed_path
+
+    actual_path = None
+    try:
+        with open(proposed_path, 'x') as _:
+            actual_path = proposed_path
+    except:
+        print(f'The proposed path {proposed_path} is not a valid path.')
+        return None
+    return actual_path
 
 
 def get_last_modified(conn, repo_name):
     csr = conn.cursor()
     csr.execute(
         "select max(committed_on) from commits where repo_name = ?", (repo_name,))
-    last_mod = csr.fetchone()[0]
-    if not last_mod:
-        return None
-    else:
-        dt = datetime.strptime(last_mod, '%Y-%m-%dT%H:%M:%S')
-        return dt + timedelta(seconds=1)
+    return csr.fetchone()[0]
 
 
 def main():
@@ -100,13 +99,13 @@ def main():
 
     last_modified = get_last_modified(conn, repo_name)
     procArgs = ["git", "log", "--date=local",
-                "--pretty=format:|%h||%s||%an||%ae||%aI", "--numstat"]
+                "--pretty=format:|%h||%s||%an||%ae||%ai", "--numstat"]
     if last_modified:
         # if last_modified actually contains a date, then we want to add new records
         # after that date, so we insert that arg here.
-        procArgs.insert(3, f'--after={last_modified}')
+        procArgs.append(f'--after={last_modified}')
 
-    # print(f'Executing: {" ".join(procArgs)}')
+    print(f'Executing: {" ".join(procArgs)}')
     log_data = subprocess.Popen(
         procArgs, stdout=subprocess.PIPE, encoding="utf-8")
 
@@ -126,7 +125,7 @@ def main():
         else:
             m = file_pattern.match(line)
             add_commit_file(cursor, commit, m[3], m[1], m[2])
-        
+
     print(f'Database is up to date for {repo_name}.')
     conn.commit()
     conn.close()
